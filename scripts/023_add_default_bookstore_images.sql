@@ -1,0 +1,49 @@
+-- Add the 4 default bookstore background images as templates
+
+INSERT INTO bookstore_images (id, title, description, image_url, is_template, user_id, is_active_storefront, created_at, updated_at)
+VALUES
+  (
+    gen_random_uuid(),
+    '現代白色圓形書店',
+    '極簡主義的白色圓形空間，配有優雅的曲線書架',
+    '/images/bookstore-1.jpg',
+    true,
+    NULL,
+    false,
+    now(),
+    now()
+  ),
+  (
+    gen_random_uuid(),
+    '橙色螺旋樓梯書店',
+    '戲劇性的橙色雕塑樓梯作為中心焦點',
+    '/images/bookstore-2.jpg',
+    true,
+    NULL,
+    false,
+    now(),
+    now()
+  ),
+  (
+    gen_random_uuid(),
+    '螺旋書店俯視圖',
+    '強調優雅的天花板設計和螺旋建築',
+    '/images/bookstore-3.jpg',
+    true,
+    NULL,
+    false,
+    now(),
+    now()
+  ),
+  (
+    gen_random_uuid(),
+    '工業風格現代書店',
+    '綠色金屬柱配溫暖木質書架',
+    '/images/bookstore-4.webp',
+    true,
+    NULL,
+    false,
+    now(),
+    now()
+  )
+ON CONFLICT DO NOTHING;
