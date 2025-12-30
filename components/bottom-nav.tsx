@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Camera, BookOpen, Store, Compass } from "lucide-react"
+import { Home, Camera, BookOpen, Store, Compass, User } from "lucide-react"
 
 export function BottomNav() {
   const pathname = usePathname()
@@ -13,6 +13,7 @@ export function BottomNav() {
     { href: "/app/my-books", icon: BookOpen, label: "我的書籍", activeColor: "text-blue-600" },
     { href: "/app/bookstore", icon: Store, label: "虛擬書店", activeColor: "text-orange-600" },
     { href: "/app/discover", icon: Compass, label: "探索發現", activeColor: "text-pink-600" },
+    { href: "/app/profile", icon: User, label: "個人資料", activeColor: "text-indigo-600" },
   ]
 
   return (

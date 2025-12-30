@@ -6,10 +6,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RefreshCw, User, Store, BookOpen, MapPin, Languages, ExternalLink } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { RefreshCw, User, Store, BookOpen, MapPin, Languages, ExternalLink, Search } from "lucide-react"
 import { BookDetailModal } from "@/components/book-detail-modal"
 import { createBrowserClient } from "@/lib/supabase/client"
 import Image from "next/image"
+import Link from "next/link"
 
 interface Profile {
   id: string
@@ -19,6 +21,7 @@ interface Profile {
   bio: string | null
   location: string | null
   language: string | null
+  display_name: string | null
 }
 
 interface Bookstore {
@@ -59,11 +62,79 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState("users")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
 
   const supabase = createBrowserClient()
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return
+
+    setIsSearching(true)
+
+    try {
+      if (activeTab === "users") {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .neq("id", userId)
+          .or(`username.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
+          .limit(20)
+        if (data) setUsers(data)
+      } else if (activeTab === "bookstores") {
+        const { data } = await supabase
+          .from("bookstore_images")
+          .select(
+            `
+            *,
+            profiles!bookstore_images_user_id_fkey (
+              id,
+              username,
+              full_name,
+              display_name,
+              avatar_url
+            )
+          `,
+          )
+          .neq("user_id", userId)
+          .ilike("store_name", `%${searchQuery}%`)
+          .not("store_name", "is", null)
+          .limit(20)
+        if (data) setBookstores(data)
+      } else if (activeTab === "books") {
+        const { data: booksData } = await supabase
+          .from("books")
+          .select("*")
+          .neq("owner_id", userId)
+          .or(`title.ilike.%${searchQuery}%,author.ilike.%${searchQuery}%`)
+          .limit(20)
+
+        if (booksData) {
+          const bookOwnerIds = booksData.map((b) => b.owner_id).filter(Boolean)
+          const { data: bookOwnerProfiles } = bookOwnerIds.length
+            ? await supabase
+                .from("profiles")
+                .select("id, username, full_name, display_name, avatar_url")
+                .in("id", bookOwnerIds)
+            : { data: [] }
+
+          const booksWithProfiles = booksData.map((book) => ({
+            ...book,
+            profiles: bookOwnerProfiles?.find((p) => p.id === book.owner_id) || null,
+          }))
+          setBooks(booksWithProfiles)
+        }
+      }
+    } catch (error) {
+      console.error("Error searching:", error)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
   const refreshRecommendations = async (type: "users" | "bookstores" | "books") => {
     setIsRefreshing(true)
+    setSearchQuery("")
 
     try {
       if (type === "users") {
@@ -79,6 +150,7 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
               id,
               username,
               full_name,
+              display_name,
               avatar_url
             )
           `,
@@ -88,23 +160,28 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
           .limit(10)
         if (data) setBookstores(data)
       } else if (type === "books") {
-        const { data } = await supabase
+        const { data: booksData } = await supabase
           .from("books")
-          .select(
-            `
-            *,
-            profiles!books_owner_id_fkey (
-              id,
-              username,
-              full_name,
-              avatar_url
-            )
-          `,
-          )
+          .select("*")
           .neq("owner_id", userId)
           .not("owner_id", "is", null)
           .limit(20)
-        if (data) setBooks(data)
+
+        if (booksData) {
+          const bookOwnerIds = booksData.map((b) => b.owner_id).filter(Boolean)
+          const { data: bookOwnerProfiles } = bookOwnerIds.length
+            ? await supabase
+                .from("profiles")
+                .select("id, username, full_name, display_name, avatar_url")
+                .in("id", bookOwnerIds)
+            : { data: [] }
+
+          const booksWithProfiles = booksData.map((book) => ({
+            ...book,
+            profiles: bookOwnerProfiles?.find((p) => p.id === book.owner_id) || null,
+          }))
+          setBooks(booksWithProfiles)
+        }
       }
     } catch (error) {
       console.error("Error refreshing recommendations:", error)
@@ -137,10 +214,31 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
             </TabsTrigger>
           </TabsList>
 
-          {/* Users Tab */}
+          <div className="mb-6">
+            <div className="flex gap-2">
+              <Input
+                placeholder={
+                  activeTab === "users"
+                    ? "搜尋用戶名稱..."
+                    : activeTab === "bookstores"
+                      ? "搜尋書店名稱..."
+                      : "搜尋書名或作者..."
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="flex-1"
+              />
+              <Button onClick={handleSearch} disabled={isSearching || !searchQuery.trim()}>
+                <Search className={`h-4 w-4 mr-2 ${isSearching ? "animate-pulse" : ""}`} />
+                搜尋
+              </Button>
+            </div>
+          </div>
+
           <TabsContent value="users" className="space-y-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold">推薦用戶</h2>
+              <h2 className="text-2xl font-semibold">{searchQuery ? "搜尋結果" : "推薦用戶"}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -174,7 +272,7 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <CardTitle className="text-base truncate">
-                            {user.full_name || user.username || "匿名用戶"}
+                            {user.display_name || user.full_name || user.username || "匿名用戶"}
                           </CardTitle>
                           {user.username && <CardDescription className="text-xs">@{user.username}</CardDescription>}
                         </div>
@@ -198,9 +296,11 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
                       </div>
                     </CardContent>
                     <CardFooter>
-                      <Button variant="outline" size="sm" className="w-full border bg-transparent">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        查看資料
+                      <Button variant="outline" size="sm" className="w-full border bg-transparent" asChild>
+                        <Link href={`/app/profile/${user.id}`}>
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          查看資料
+                        </Link>
                       </Button>
                     </CardFooter>
                   </Card>
@@ -209,10 +309,9 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
             )}
           </TabsContent>
 
-          {/* Bookstores Tab */}
           <TabsContent value="bookstores" className="space-y-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold">推薦書店</h2>
+              <h2 className="text-2xl font-semibold">{searchQuery ? "搜尋結果" : "推薦書店"}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -259,7 +358,10 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium">
-                            {bookstore.profiles?.full_name || bookstore.profiles?.username || "匿名用戶"}
+                            {bookstore.profiles?.display_name ||
+                              bookstore.profiles?.full_name ||
+                              bookstore.profiles?.username ||
+                              "匿名用戶"}
                           </p>
                           {bookstore.profiles?.username && (
                             <p className="text-xs text-muted-foreground">@{bookstore.profiles.username}</p>
@@ -284,10 +386,9 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
             )}
           </TabsContent>
 
-          {/* Books Tab */}
           <TabsContent value="books" className="space-y-4">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-semibold">推薦書籍</h2>
+              <h2 className="text-2xl font-semibold">{searchQuery ? "搜尋結果" : "推薦書籍"}</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -340,7 +441,7 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-xs text-muted-foreground truncate">
-                          {book.profiles?.username || "匿名"}
+                          {book.profiles?.display_name || book.profiles?.full_name || book.profiles?.username || "匿名"}
                         </span>
                       </div>
                       {book.category && (
@@ -357,7 +458,6 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
         </Tabs>
       </div>
 
-      {/* Book Detail Modal */}
       {selectedBook && (
         <BookDetailModal
           book={{
@@ -372,15 +472,9 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
             image_url: selectedBook.image_url || "",
             owner_id: selectedBook.owner_id,
           }}
-          isOpen={true}
-          onClose={() => setSelectedBook(null)}
-          onSave={async () => {
-            // Read-only mode for discovered books
-          }}
-          onDelete={async () => {
-            // No delete for discovered books
-          }}
+          userId={userId}
           readOnly={true}
+          onClose={() => setSelectedBook(null)}
         />
       )}
     </div>

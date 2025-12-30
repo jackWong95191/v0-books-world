@@ -1,27 +1,43 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Edit, Save, Trash2, Upload, BookMarked, Building2, Languages, FileText, Hash, Tag } from "lucide-react"
-import { createClient } from "@/lib/supabase"
+import {
+  X,
+  Edit,
+  Save,
+  Trash2,
+  Upload,
+  BookMarked,
+  Building2,
+  Languages,
+  FileText,
+  Hash,
+  Tag,
+  MessageCircle,
+  ShoppingCart,
+  BookOpen,
+} from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 import type { Book } from "@/types/bookshelf"
+import { uploadBookCover } from "@/app/actions/upload-book-cover"
+import { saveUserBook } from "@/app/actions/save-user-book"
 
 interface BookDetailModalProps {
   book: Book
-  userId: string
+  userId?: string
   onClose: () => void
-  onUpdate: (updatedBook: Book) => void
-  onDelete: (bookId: string) => void
+  onUpdate?: (updatedBook: Book) => void
+  onDelete?: (bookId: string) => void
+  readOnly?: boolean
 }
 
-export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: BookDetailModalProps) {
-  const supabase = createClient()
+export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, readOnly = false }: BookDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -44,7 +60,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
     format: book.format || "paperback",
     category: book.category || "",
     image_url: book.image_url || "",
-    status: "private",
+    status: "hold",
     price_cents: "",
     owner_sharing: "",
   })
@@ -52,23 +68,70 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
   useEffect(() => {
     // Fetch user-specific book data
     async function fetchUserBookData() {
-      const { data } = await supabase
+      const { data, error } = await createClient()
         .from("user_books")
         .select("*")
         .eq("book_id", book.id)
         .eq("user_id", userId)
-        .single()
+        .maybeSingle()
+
+      if (error) {
+        console.error("[v0] Error fetching user book data:", error)
+        return
+      }
 
       if (data) {
         setUserBookData(data)
         setFormData((prev) => ({
           ...prev,
-          status: data.status || "private",
+          status: data.status || "hold",
         }))
       }
     }
     fetchUserBookData()
-  }, [book.id, userId, supabase])
+
+    if (readOnly && book.owner_id) {
+      async function fetchOwnerProfile() {
+        const { data } = await createClient()
+          .from("profiles")
+          .select("username, full_name, avatar_url")
+          .eq("id", book.owner_id)
+          .single()
+
+        if (data) {
+          setOwnerProfile(data)
+        }
+      }
+      fetchOwnerProfile()
+    }
+  }, [book.id, userId, readOnly, book.owner_id])
+
+  useEffect(() => {
+    console.log("[v0] Book prop changed, updating form data")
+    setFormData({
+      title: book.title,
+      author: book.author,
+      isbn: book.isbn || "",
+      description: book.description || "",
+      publication_year: book.publication_year?.toString() || "",
+      publisher: book.publisher || "",
+      edition: book.edition || "",
+      language: book.language || "zh",
+      pages: book.pages?.toString() || "",
+      format: book.format || "paperback",
+      category: book.category || "",
+      image_url: book.image_url || "",
+      status: userBookData?.status || "hold",
+      price_cents: "",
+      owner_sharing: "",
+    })
+  }, [book, book.title, book.author, book.image_url, userBookData?.status])
+
+  const [ownerProfile, setOwnerProfile] = useState<{
+    username: string | null
+    full_name: string | null
+    avatar_url: string | null
+  } | null>(null)
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -77,77 +140,74 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
     try {
       setUploadingImage(true)
 
-      const fileName = `${Date.now()}_${file.name}`
-      const filePath = `${userId}/${fileName}`
+      const formData = new FormData()
+      formData.append("file", file)
 
-      const { error: uploadError } = await supabase.storage.from("book-covers").upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: false,
-      })
+      const result = await uploadBookCover(formData)
 
-      if (uploadError) throw uploadError
+      if (result.error) {
+        throw new Error(result.error)
+      }
 
-      const { data: urlData } = supabase.storage.from("book-covers").getPublicUrl(filePath)
-
-      setFormData((prev) => ({ ...prev, image_url: urlData.publicUrl }))
+      if (result.url) {
+        setFormData((prev) => ({ ...prev, image_url: result.url }))
+      }
     } catch (error) {
       console.error("Error uploading image:", error)
-      alert("上傳圖片失敗")
+      alert(`上傳圖片失敗: ${error instanceof Error ? error.message : "未知錯誤"}`)
     } finally {
       setUploadingImage(false)
     }
   }
 
   async function handleSave() {
+    if (!formData.title || !formData.author) {
+      alert("請填寫書名和作者")
+      return
+    }
+
     setLoading(true)
     try {
-      // Update books table
+      const supabase = createClient()
+
       const bookData = {
-        title: formData.title,
-        author: formData.author,
-        isbn: formData.isbn || null,
-        description: formData.description || null,
+        title: formData.title.trim(),
+        author: formData.author.trim(),
+        isbn: formData.isbn?.trim() || null,
+        description: formData.description?.trim() || null,
         publication_year: formData.publication_year ? Number.parseInt(formData.publication_year) : null,
-        publisher: formData.publisher || null,
-        edition: formData.edition || null,
+        publisher: formData.publisher?.trim() || null,
+        edition: formData.edition?.trim() || null,
         language: formData.language,
         pages: formData.pages ? Number.parseInt(formData.pages) : null,
         format: formData.format,
-        category: formData.category || null,
+        category: formData.category?.trim() || null,
         image_url: formData.image_url || null,
       }
 
-      const { data: updatedBook, error } = await supabase
-        .from("books")
-        .update(bookData)
-        .eq("id", book.id)
-        .select()
-        .single()
+      const { error: updateError } = await supabase.from("books").update(bookData).eq("id", book.id)
 
-      if (error) throw error
-
-      // Update or insert user_books data
-      if (userBookData) {
-        await supabase
-          .from("user_books")
-          .update({
-            status: formData.status,
-          })
-          .eq("book_id", book.id)
-          .eq("user_id", userId)
-      } else {
-        await supabase.from("user_books").insert({
-          book_id: book.id,
-          user_id: userId,
-          status: formData.status,
-        })
+      if (updateError) {
+        throw new Error(`更新書籍失敗: ${updateError.message}`)
       }
 
-      onUpdate(updatedBook)
+      await saveUserBook(book.id, formData.status)
+
+      const updatedBook: Book = {
+        ...book,
+        ...bookData,
+      }
+
       setIsEditing(false)
+
+      if (onUpdate) {
+        onUpdate(updatedBook)
+      }
+
+      alert("書籍資訊已成功更新")
     } catch (error) {
       console.error("Error saving book:", error)
-      alert("保存失敗")
+      alert(error instanceof Error ? error.message : "保存失敗")
     } finally {
       setLoading(false)
     }
@@ -155,18 +215,27 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
 
   async function handleDeleteClick() {
     if (!confirm("確定要刪除這本書嗎？")) return
-    onDelete(book.id)
+    onDelete?.(book.id)
     onClose()
+  }
+
+  async function handleContactOwner(action: "borrow" | "buy") {
+    const message =
+      action === "borrow"
+        ? `我對您的書籍「${book.title}」感興趣，想詢問是否可以借閱。`
+        : `我對您的書籍「${book.title}」感興趣，想詢問購買事宜。`
+
+    alert(`聯繫功能即將推出！\n\n訊息：${message}`)
   }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border-2 border-gray-200">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col border-2 border-gray-200">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-border p-4 flex items-center justify-between z-10">
-          <h2 className="text-lg font-bold">{isEditing ? "編輯書籍資料" : "書籍詳情"}</h2>
+        <div className="bg-white border-b border-border p-4 flex items-center justify-between flex-shrink-0">
+          <h2 className="text-lg font-bold">{readOnly ? "書籍詳情" : isEditing ? "編輯書籍資料" : "書籍詳情"}</h2>
           <div className="flex items-center gap-2">
-            {!isEditing ? (
+            {!readOnly && !isEditing ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="border border-border">
                   <Edit className="w-4 h-4 mr-2" />
@@ -190,8 +259,8 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          {!isEditing ? (
+        <div className="overflow-y-auto flex-1 p-6">
+          {!isEditing || readOnly ? (
             // View Mode
             <div className="space-y-6">
               {/* Book Cover and Basic Info */}
@@ -303,9 +372,58 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{formData.description}</p>
                 </div>
               )}
+
+              {readOnly && ownerProfile && (
+                <div className="pt-4 border-t space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4" />
+                      書籍擁有者
+                    </h4>
+                    <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                      {ownerProfile.avatar_url && (
+                        <Image
+                          src={ownerProfile.avatar_url || "/placeholder.svg"}
+                          alt={ownerProfile.full_name || ownerProfile.username || "用戶"}
+                          width={40}
+                          height={40}
+                          className="rounded-full"
+                        />
+                      )}
+                      <div>
+                        <p className="font-medium">{ownerProfile.full_name || ownerProfile.username || "匿名用戶"}</p>
+                        {ownerProfile.username && (
+                          <p className="text-sm text-muted-foreground">@{ownerProfile.username}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold mb-3">感興趣嗎？</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        onClick={() => handleContactOwner("borrow")}
+                        className="border border-purple-600 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 text-purple-700"
+                      >
+                        <MessageCircle className="w-4 h-4 mr-2" />
+                        詢問借閱
+                      </Button>
+                      <Button
+                        onClick={() => handleContactOwner("buy")}
+                        className="border border-green-600 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 text-green-700"
+                      >
+                        <ShoppingCart className="w-4 h-4 mr-2" />
+                        詢問購買
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2 text-center">點擊按鈕將向書籍擁有者發送詢問訊息</p>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            // Edit Mode
+            // Edit Mode - only shown when not readOnly
             <div className="space-y-4">
               {/* Cover Image Upload */}
               <div>
@@ -477,7 +595,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete }: B
                     <option value="private">私密</option>
                     <option value="hold">持有</option>
                     <option value="lending">可借閱</option>
-                    <option value="selling">出售</option>
+                    <option value="selling">可出售</option>
                   </select>
                 </div>
 

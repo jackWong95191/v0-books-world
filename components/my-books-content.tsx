@@ -2,11 +2,12 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { createClient } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/use-toast"
 import {
   Search,
   Plus,
@@ -20,6 +21,7 @@ import {
   FileText,
   LayoutGrid,
   Hash,
+  GripVertical,
 } from "lucide-react"
 import Image from "next/image"
 import { BookshelfView } from "@/components/bookshelf-view"
@@ -37,13 +39,14 @@ export function MyBooksContent({
   initialPreferences: BookshelfPreferences
   userId: string
 }) {
-  const supabase = createClient()
   const [books, setBooks] = useState<Book[]>(initialBooks)
   const [preferences, setPreferences] = useState<BookshelfPreferences>(initialPreferences)
   const [searchQuery, setSearchQuery] = useState("")
   const [isAddingBook, setIsAddingBook] = useState(false)
   const [editingBook, setEditingBook] = useState<Book | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [isReorderMode, setIsReorderMode] = useState(false)
+  const [draggedBookId, setDraggedBookId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: "",
     author: "",
@@ -61,21 +64,48 @@ export function MyBooksContent({
   const [loading, setLoading] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
+  const [user, setUser] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  async function fetchBooks() {
+    if (!user) return
+
+    setIsLoading(true)
+    try {
+      const supabase = createClient()
+
+      const { data, error } = await supabase
+        .from("books")
+        .select(
+          `
+            *,
+            user_books!inner(status, rating, review, added_at, display_order)
+          `,
+        )
+        .eq("user_books.user_id", user.id)
+        .order("user_books.display_order", { ascending: true, nullsFirst: false })
+        .order("user_books.added_at", { ascending: false })
+
+      console.log("[v0] Fetched books from database:", data?.length || 0)
+
+      if (error) throw error
+
+      setBooks((data as Book[]) || [])
+    } catch (error) {
+      console.error("[v0] Error fetching books:", error)
+      toast({
+        title: "載入失敗",
+        description: "無法載入書籍資料",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function fetchBooks() {
-      const { data } = await supabase
-        .from("books")
-        .select("*")
-        .eq("owner_id", userId)
-        .order("created_at", { ascending: false })
-
-      if (data) {
-        setBooks(data)
-      }
-    }
     fetchBooks()
-  }, [supabase, userId])
+  }, [userId])
 
   const filteredBooks = books.filter(
     (book) =>
@@ -134,6 +164,7 @@ export function MyBooksContent({
     try {
       setUploadingImage(true)
 
+      const supabase = createClient()
       const {
         data: { user },
       } = await supabase.auth.getUser()
@@ -172,6 +203,7 @@ export function MyBooksContent({
     setLoading(true)
 
     try {
+      const supabase = createClient()
       const bookData = {
         title: formData.title,
         author: formData.author,
@@ -214,6 +246,7 @@ export function MyBooksContent({
   async function handleDelete(bookId: string) {
     if (!confirm("確定要刪除這本書嗎？")) return
 
+    const supabase = createClient()
     const { error } = await supabase.from("books").delete().eq("id", bookId)
 
     if (!error) {
@@ -243,6 +276,70 @@ export function MyBooksContent({
     }
   }
 
+  function handleDragStart(bookId: string) {
+    setDraggedBookId(bookId)
+  }
+
+  function handleDragOver(e: React.DragEvent, targetBookId: string) {
+    e.preventDefault()
+    if (!draggedBookId || draggedBookId === targetBookId) return
+
+    const draggedIndex = books.findIndex((b) => b.id === draggedBookId)
+    const targetIndex = books.findIndex((b) => b.id === targetBookId)
+
+    if (draggedIndex === -1 || targetIndex === -1) return
+
+    const newBooks = [...books]
+    const [draggedBook] = newBooks.splice(draggedIndex, 1)
+    newBooks.splice(targetIndex, 0, draggedBook)
+
+    setBooks(newBooks)
+  }
+
+  function handleDragEnd() {
+    setDraggedBookId(null)
+  }
+
+  async function saveBookOrder() {
+    setIsLoading(true)
+    console.log("[v0] Saving book order...")
+    const supabase = createClient()
+
+    try {
+      for (let i = 0; i < books.length; i++) {
+        const book = books[i]
+        const { error } = await supabase
+          .from("user_books")
+          .update({ display_order: i })
+          .eq("book_id", book.id)
+          .eq("user_id", userId)
+
+        if (error) {
+          console.error("[v0] Error updating book order:", error)
+          throw error
+        }
+      }
+
+      console.log("[v0] Book order saved successfully")
+      toast({
+        title: "順序已保存",
+        description: "您的書籍排序已成功保存",
+      })
+
+      setIsReorderMode(false)
+      await fetchBooks() // Refresh to get the new order
+    } catch (error) {
+      console.error("[v0] Failed to save book order:", error)
+      toast({
+        title: "保存失敗",
+        description: "無法保存書籍順序，請重試",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <>
       {/* Header */}
@@ -261,13 +358,15 @@ export function MyBooksContent({
                 className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
-            <Button
-              onClick={openAddDialog}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full px-4 py-2.5 gap-2 whitespace-nowrap border border-purple-700"
-            >
-              <Plus className="w-4 h-4" />
-              添加
-            </Button>
+            {!isReorderMode && (
+              <Button
+                onClick={openAddDialog}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full px-4 py-2.5 gap-2 whitespace-nowrap border border-purple-700"
+              >
+                <Plus className="w-4 h-4" />
+                添加
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -286,13 +385,66 @@ export function MyBooksContent({
               添加第一本書
             </Button>
           </div>
+        ) : isReorderMode ? (
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">拖動書籍重新排序</h2>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsReorderMode(false)}>
+                  取消
+                </Button>
+                <Button
+                  onClick={saveBookOrder}
+                  disabled={isLoading}
+                  className="bg-primary border-2 border-primary hover:bg-primary/90 hover:border-primary/90 active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {isLoading ? "保存中..." : "保存順序"}
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {books.map((book) => (
+                <div
+                  key={book.id}
+                  draggable
+                  onDragStart={() => handleDragStart(book.id)}
+                  onDragOver={(e) => handleDragOver(e, book.id)}
+                  onDragEnd={handleDragEnd}
+                  className={`cursor-move ${draggedBookId === book.id ? "opacity-50" : ""}`}
+                >
+                  <div className="aspect-[2/3] bg-muted rounded overflow-hidden relative">
+                    <div className="absolute top-2 right-2 z-10 bg-black/50 rounded-full p-1">
+                      <GripVertical className="w-4 h-4 text-white" />
+                    </div>
+                    {book.image_url ? (
+                      <Image
+                        src={book.image_url || "/placeholder.svg"}
+                        alt={book.title}
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl">📚</div>
+                    )}
+                  </div>
+                  <div className="mt-2">
+                    <h3 className="font-semibold text-sm line-clamp-2">{book.title}</h3>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <BookshelfView
+            key={`bookshelf-${books.length}-${books.map((b) => b.id + b.title + b.image_url).join("-")}`}
             books={filteredBooks}
             preferences={preferences}
             onEditBook={(book) => setSelectedBook(book)}
             onDeleteBook={handleDelete}
             onOpenSettings={() => setShowSettings(true)}
+            onReorder={() => setIsReorderMode(true)}
           />
         )}
       </div>
@@ -528,9 +680,14 @@ export function MyBooksContent({
           book={selectedBook}
           userId={userId}
           onClose={() => setSelectedBook(null)}
-          onUpdate={(updatedBook) => {
-            setBooks((prev) => prev.map((b) => (b.id === updatedBook.id ? updatedBook : b)))
+          onUpdate={async (updatedBook) => {
+            console.log("[v0] onUpdate called in my-books-content with book:", updatedBook)
+
             setSelectedBook(null)
+
+            console.log("[v0] Refreshing books from database...")
+            await fetchBooks()
+            console.log("[v0] Books refreshed successfully, count:", books.length)
           }}
           onDelete={handleDelete}
         />

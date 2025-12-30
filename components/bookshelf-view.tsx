@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Settings, Grid3x3, Edit, Trash2 } from "lucide-react"
+import { Settings, Grid3x3, Edit, Trash2, ArrowUpDown } from "lucide-react"
 import type { Book, BookshelfPreferences } from "@/types/bookshelf"
 
 interface BookshelfViewProps {
@@ -12,9 +12,19 @@ interface BookshelfViewProps {
   onEditBook: (book: Book) => void
   onDeleteBook: (bookId: string) => void
   onOpenSettings: () => void
+  onReorder?: () => void
+  readOnly?: boolean
 }
 
-export function BookshelfView({ books, preferences, onEditBook, onDeleteBook, onOpenSettings }: BookshelfViewProps) {
+export function BookshelfView({
+  books,
+  preferences,
+  onEditBook,
+  onDeleteBook,
+  onOpenSettings,
+  onReorder,
+  readOnly = false,
+}: BookshelfViewProps) {
   const { wood_color, wood_material, shelf_rows, shelf_columns } = preferences
   const [viewMode, setViewMode] = useState<"bookshelf" | "grid">("bookshelf")
   const [selectedBook, setSelectedBook] = useState<Book | null>(null)
@@ -106,10 +116,17 @@ export function BookshelfView({ books, preferences, onEditBook, onDeleteBook, on
           <Button variant="outline" size="sm" onClick={() => setViewMode("bookshelf")} className="border border-border">
             切換到書架視圖
           </Button>
-          <Button variant="outline" size="sm" onClick={onOpenSettings} className="border border-border bg-transparent">
-            <Settings className="w-4 h-4 mr-2" />
-            書架設置
-          </Button>
+          {!readOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenSettings}
+              className="border border-border bg-transparent"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              書架設置
+            </Button>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {books.map((book) => (
@@ -123,14 +140,16 @@ export function BookshelfView({ books, preferences, onEditBook, onDeleteBook, on
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-4xl">📚</div>
                 )}
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => onEditBook(book)}>
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => onDeleteBook(book.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
+                {!readOnly && (
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => onEditBook(book)}>
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={() => onDeleteBook(book.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="mt-2">
                 <h3 className="font-semibold text-sm line-clamp-2">{book.title}</h3>
@@ -166,10 +185,25 @@ export function BookshelfView({ books, preferences, onEditBook, onDeleteBook, on
             網格視圖
           </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={onOpenSettings} className="border border-border bg-transparent">
-          <Settings className="w-4 h-4 mr-2" />
-          書架設置
-        </Button>
+        {!readOnly && (
+          <div className="flex gap-2">
+            {onReorder && (
+              <Button variant="outline" size="sm" onClick={onReorder} className="border border-border bg-transparent">
+                <ArrowUpDown className="w-4 h-4 mr-2" />
+                重新排序
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenSettings}
+              className="border border-border bg-transparent"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              書架設置
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="relative rounded-lg overflow-hidden">
@@ -224,25 +258,26 @@ export function BookshelfView({ books, preferences, onEditBook, onDeleteBook, on
                               <div className="text-[8px] text-center font-semibold line-clamp-3 px-1">{book.title}</div>
                             </div>
                           )}
-                          {/* Hover actions */}
-                          <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8 w-8 p-0 border border-gray-300"
-                              onClick={() => onEditBook(book)}
-                            >
-                              <Edit className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="h-8 w-8 p-0 border border-red-700"
-                              onClick={() => onDeleteBook(book.id)}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </div>
+                          {!readOnly && (
+                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="h-8 w-8 p-0 border border-gray-300"
+                                onClick={() => onEditBook(book)}
+                              >
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-8 w-8 p-0 border border-red-700"
+                                onClick={() => onDeleteBook(book.id)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Book info tooltip - positioned above, kept within viewport */}
