@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { type NextRequest, NextResponse } from "next/server"
 
+const ADMIN_USER_ID = "7881efa4-4809-47da-b719-2139bd41d603"
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -35,6 +37,20 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/auth/login"
     url.searchParams.set("redirectTo", request.nextUrl.pathname)
     return NextResponse.redirect(url)
+  }
+
+  if (request.nextUrl.pathname.startsWith("/admin")) {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/auth/login"
+      return NextResponse.redirect(url)
+    }
+
+    if (user.id !== ADMIN_USER_ID) {
+      const url = request.nextUrl.clone()
+      url.pathname = "/app/my-books"
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse
