@@ -27,7 +27,7 @@ export function BookshelfView({
 }: BookshelfViewProps) {
   const { wood_color, wood_material, shelf_rows, shelf_columns } = preferences
   const [viewMode, setViewMode] = useState<"bookshelf" | "grid">("bookshelf")
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null)
+  // const [selectedBook, setSelectedBook] = useState<Book | null>(null)
 
   // Calculate bookshelf dimensions
   const totalSlots = shelf_rows * shelf_columns
@@ -133,7 +133,7 @@ export function BookshelfView({
             <div key={book.id} className="group relative">
               <div
                 className="aspect-[2/3] bg-muted rounded overflow-hidden relative cursor-pointer"
-                onClick={() => setSelectedBook(book)}
+                onClick={() => onEditBook(book)}
               >
                 {book.image_url ? (
                   <Image src={book.image_url || "/placeholder.svg"} alt={book.title} fill className="object-cover" />
@@ -218,13 +218,10 @@ export function BookshelfView({
             />
           </div>
 
-          {/* Content area with proper padding to keep books inside */}
           <div className="flex-1 px-4 py-8">
-            {/* Shelves */}
             <div className="space-y-8">
               {shelves.map((shelfBooks, shelfIndex) => (
                 <div key={shelfIndex} className="relative">
-                  {/* Books on shelf - constrained within container */}
                   <div
                     className="flex items-end gap-4 pb-4 min-h-[180px] overflow-hidden"
                     style={{
@@ -240,10 +237,9 @@ export function BookshelfView({
                           maxWidth: bookWidth,
                         }}
                       >
-                        {/* Book cover - constrained size */}
                         <div
                           className="aspect-[2/3] bg-white rounded-sm shadow-lg border border-gray-200 overflow-hidden relative hover:scale-105 transition-transform cursor-pointer"
-                          onClick={() => setSelectedBook(book)}
+                          onClick={() => onEditBook(book)}
                         >
                           {book.image_url ? (
                             <Image
@@ -264,7 +260,10 @@ export function BookshelfView({
                                 size="sm"
                                 variant="secondary"
                                 className="h-8 w-8 p-0 border border-gray-300"
-                                onClick={() => onEditBook(book)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onEditBook(book)
+                                }}
                               >
                                 <Edit className="w-3 h-3" />
                               </Button>
@@ -272,7 +271,10 @@ export function BookshelfView({
                                 size="sm"
                                 variant="destructive"
                                 className="h-8 w-8 p-0 border border-red-700"
-                                onClick={() => onDeleteBook(book.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onDeleteBook(book.id)
+                                }}
                               >
                                 <Trash2 className="w-3 h-3" />
                               </Button>
@@ -280,7 +282,6 @@ export function BookshelfView({
                           )}
                         </div>
 
-                        {/* Book info tooltip - positioned above, kept within viewport */}
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
                           <div className="bg-black/90 text-white text-xs p-2 rounded shadow-lg whitespace-nowrap max-w-[200px]">
                             <div className="font-semibold truncate">{book.title}</div>
@@ -292,7 +293,6 @@ export function BookshelfView({
                         </div>
                       </div>
                     ))}
-                    {/* Empty slots */}
                     {Array.from({ length: booksPerShelf - shelfBooks.length }).map((_, i) => (
                       <div
                         key={`empty-${i}`}
@@ -324,7 +324,6 @@ export function BookshelfView({
               ))}
             </div>
 
-            {/* Empty state */}
             {books.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center text-gray-400">

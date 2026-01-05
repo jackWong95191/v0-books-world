@@ -25,12 +25,11 @@ export default async function UserProfilePage({ params }: { params: { userId: st
     notFound()
   }
 
-  // Check if there's a connection invitation between users
-  const { data: existingInvitation } = await supabase
-    .from("connection_invitations")
+  const { data: existingFollow } = await supabase
+    .from("follows")
     .select("*")
-    .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-    .or(`sender_id.eq.${params.userId},receiver_id.eq.${params.userId}`)
+    .eq("follower_id", user.id)
+    .eq("following_id", params.userId)
     .maybeSingle()
 
   // Fetch virtual bookstore if exists
@@ -76,7 +75,7 @@ export default async function UserProfilePage({ params }: { params: { userId: st
       <UserProfileView
         profile={profile}
         userId={user.id}
-        existingInvitation={existingInvitation}
+        existingInvitation={existingFollow}
         userBookstore={userBookstore}
         books={books || []}
         bookTags={bookTags}

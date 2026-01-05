@@ -8,6 +8,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Send } from "lucide-react"
+import {
   X,
   Edit,
   Save,
@@ -64,6 +73,15 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
     price_cents: "",
     owner_sharing: "",
   })
+
+  const [ownerProfile, setOwnerProfile] = useState<{
+    username: string
+    full_name: string | null
+    avatar_url: string | null
+  } | null>(null)
+  const [showMessageDialog, setShowMessageDialog] = useState(false)
+  const [messageType, setMessageType] = useState<"borrow" | "buy">("borrow")
+  const [messageContent, setMessageContent] = useState("")
 
   useEffect(() => {
     // Fetch user-specific book data
@@ -126,12 +144,6 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
       owner_sharing: "",
     })
   }, [book, book.title, book.author, book.image_url, userBookData?.status])
-
-  const [ownerProfile, setOwnerProfile] = useState<{
-    username: string | null
-    full_name: string | null
-    avatar_url: string | null
-  } | null>(null)
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -220,12 +232,41 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
   }
 
   async function handleContactOwner(action: "borrow" | "buy") {
-    const message =
+    const defaultMessage =
       action === "borrow"
-        ? `我對您的書籍「${book.title}」感興趣，想詢問是否可以借閱。`
-        : `我對您的書籍「${book.title}」感興趣，想詢問購買事宜。`
+        ? `您好！我對您的書籍「${book.title}」很感興趣，想詢問是否可以借閱。\n\n期待您的回覆，謝謝！`
+        : `您好！我對您的書籍「${book.title}」很感興趣，想詢問購買事宜。\n\n請問這本書是否可以出售？價格大約是多少呢？\n\n期待您的回覆，謝謝！`
 
-    alert(`聯繫功能即將推出！\n\n訊息：${message}`)
+    setMessageType(action)
+    setMessageContent(defaultMessage)
+    setShowMessageDialog(true)
+  }
+
+  async function handleSendMessage() {
+    if (!messageContent.trim() || !book.owner_id) {
+      return
+    }
+
+    const supabase = createClient()
+    const subject = messageType === "borrow" ? `借閱詢問：${book.title}` : `購買詢問：${book.title}`
+
+    const { error } = await supabase.from("messages").insert({
+      sender_id: userId,
+      receiver_id: book.owner_id,
+      subject,
+      content: messageContent,
+      book_id: book.id,
+      message_type: messageType === "borrow" ? "borrow_request" : "buy_request",
+    })
+
+    if (error) {
+      console.error("Error sending message:", error)
+      alert("發送失敗，請稍後再試")
+    } else {
+      alert("訊息已發送！")
+      setShowMessageDialog(false)
+      setMessageContent("")
+    }
   }
 
   return (
@@ -639,6 +680,54 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
           )}
         </div>
       </div>
+      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{messageType === "borrow" ? "借閱詢問" : "購買詢問"}</DialogTitle>
+            <DialogDescription>
+              發送訊息給 {ownerProfile?.full_name || ownerProfile?.username || "書籍擁有者"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <div className="flex items-center gap-3">
+                {book.image_url && (
+                  <Image
+                    src={book.image_url || "/placeholder.svg"}
+                    alt={book.title}
+                    width={60}
+                    height={80}
+                    className="rounded object-cover"
+                  />
+                )}
+                <div>
+                  <p className="font-semibold">{book.title}</p>
+                  <p className="text-sm text-muted-foreground">{book.author}</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <Label>訊息內容</Label>
+              <Textarea
+                value={messageContent}
+                onChange={(e) => setMessageContent(e.target.value)}
+                rows={8}
+                placeholder="編輯您的詢問訊息..."
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowMessageDialog(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSendMessage} disabled={!messageContent.trim()}>
+              <Send className="w-4 h-4 mr-2" />
+              發送訊息
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

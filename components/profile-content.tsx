@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,19 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { uploadProfilePicture } from "@/app/actions/upload-profile-picture"
-import {
-  Edit,
-  Mail,
-  MapPin,
-  Globe,
-  Facebook,
-  Instagram,
-  UserPlus,
-  CheckCircle,
-  XCircle,
-  Store,
-  BookOpen,
-} from "lucide-react"
+import { Edit, Mail, MapPin, Globe, Facebook, Instagram, UserPlus, Store, BookOpen } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 const BOOK_CATEGORIES = [
@@ -66,10 +54,10 @@ interface Profile {
   updated_at: string
 }
 
-interface ConnectionInvitation {
+interface Follow {
   id: string
-  sender_id: string
-  receiver_id: string
+  follower_id: string
+  following_id: string
   status: string
   message: string | null
   created_at: string
@@ -79,7 +67,7 @@ interface ProfileContentProps {
   profile: Profile | null
   userId: string
   isOwnProfile: boolean
-  existingInvitation?: ConnectionInvitation | null
+  existingInvitation?: any | null
   hasBookstore?: boolean
   onViewBookstore?: () => void
   onViewBookshelf?: () => void
@@ -97,8 +85,9 @@ export function ProfileContent({
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
-  const [isSendingInvitation, setIsSendingInvitation] = useState(false)
-  const [invitationMessage, setInvitationMessage] = useState("")
+  const [isSendingFollow, setIsSendingFollow] = useState(false)
+  const [followMessage, setFollowMessage] = useState("")
+  const [existingFollow, setExistingFollow] = useState<any>(null)
   const { toast } = useToast()
 
   const [formData, setFormData] = useState({
@@ -190,23 +179,23 @@ export function ProfileContent({
     })
   }
 
-  const handleSendInvitation = async () => {
-    setIsSendingInvitation(true)
+  const handleSendFollow = async () => {
+    setIsSendingFollow(true)
     const supabase = createBrowserClient()
 
-    const { error } = await supabase.from("connection_invitations").insert({
-      sender_id: userId,
-      receiver_id: profile?.id,
+    const { error } = await supabase.from("follows").insert({
+      follower_id: userId,
+      following_id: profile?.id,
       status: "pending",
-      message: invitationMessage,
+      message: followMessage,
     })
 
-    setIsSendingInvitation(false)
+    setIsSendingFollow(false)
 
     if (error) {
       toast({
         title: "錯誤",
-        description: "發送連結邀請失敗",
+        description: "發送追蹤請求失敗",
         variant: "destructive",
       })
       return
@@ -214,34 +203,75 @@ export function ProfileContent({
 
     toast({
       title: "成功",
-      description: "連結邀請已發送",
+      description: "追蹤請求已發送",
     })
     window.location.reload()
   }
 
-  const handleResponseInvitation = async (status: "accepted" | "rejected") => {
+  const handleResponseFollow = async (followId: string, status: "accepted" | "rejected") => {
     const supabase = createBrowserClient()
 
-    const { error } = await supabase
-      .from("connection_invitations")
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq("id", existingInvitation?.id)
+    if (status === "rejected") {
+      const { error } = await supabase.from("follows").delete().eq("id", followId)
 
-    if (error) {
-      toast({
-        title: "錯誤",
-        description: "更新連結邀請失敗",
-        variant: "destructive",
-      })
-      return
+      if (error) {
+        toast({
+          title: "錯誤",
+          description: "更新追蹤請求失敗",
+          variant: "destructive",
+        })
+        return
+      }
+    } else {
+      const { error } = await supabase
+        .from("follows")
+        .update({ status: "accepted", updated_at: new Date().toISOString() })
+        .eq("id", followId)
+
+      if (error) {
+        toast({
+          title: "錯誤",
+          description: "更新追蹤請求失敗",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     toast({
       title: "成功",
-      description: status === "accepted" ? "已接受連結邀請" : "已拒絕連結邀請",
+      description: status === "accepted" ? "已接受追蹤請求" : "已拒絕追蹤請求",
     })
     window.location.reload()
   }
+
+  useEffect(() => {
+    async function checkFollow() {
+      if (isOwnProfile) return
+
+      const supabase = createBrowserClient()
+      // Check if current user is following the profile owner
+      const { data: outgoingFollow } = await supabase
+        .from("follows")
+        .select("*")
+        .eq("follower_id", userId)
+        .eq("following_id", profile?.id)
+        .maybeSingle()
+
+      // Check if profile owner is following current user
+      const { data: incomingFollow } = await supabase
+        .from("follows")
+        .select("*")
+        .eq("follower_id", profile?.id)
+        .eq("following_id", userId)
+        .maybeSingle()
+
+      // Use whichever follow relationship exists
+      setExistingFollow(outgoingFollow || incomingFollow)
+    }
+
+    checkFollow()
+  }, [userId, profile, isOwnProfile])
 
   const displayName = profile?.display_name || profile?.full_name || profile?.username || "匿名用戶"
 
@@ -347,52 +377,48 @@ export function ProfileContent({
                         </Button>
                       )}
 
-                      {!existingInvitation && (
+                      {!existingFollow && (
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button variant="default">
                               <UserPlus className="h-4 w-4 mr-2" />
-                              發送連結邀請
+                              追蹤
                             </Button>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>發送連結邀請給 {displayName}</DialogTitle>
+                              <DialogTitle>追蹤 {displayName}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4">
                               <div>
-                                <Label htmlFor="message">邀請訊息（選填）</Label>
+                                <Label htmlFor="message">訊息（選填）</Label>
                                 <Textarea
                                   id="message"
                                   placeholder="向對方介紹自己..."
-                                  value={invitationMessage}
-                                  onChange={(e) => setInvitationMessage(e.target.value)}
+                                  value={followMessage}
+                                  onChange={(e) => setFollowMessage(e.target.value)}
                                   rows={4}
                                 />
                               </div>
-                              <Button onClick={handleSendInvitation} disabled={isSendingInvitation} className="w-full">
-                                {isSendingInvitation ? "發送中..." : "發送邀請"}
+                              <Button onClick={handleSendFollow} disabled={isSendingFollow} className="w-full">
+                                {isSendingFollow ? "發送中..." : "發送追蹤請求"}
                               </Button>
                             </div>
                           </DialogContent>
                         </Dialog>
                       )}
-                      {existingInvitation?.status === "pending" && existingInvitation.receiver_id === userId && (
-                        <div className="flex gap-2">
-                          <Button onClick={() => handleResponseInvitation("accepted")} variant="default">
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            接受邀請
-                          </Button>
-                          <Button onClick={() => handleResponseInvitation("rejected")} variant="outline">
-                            <XCircle className="h-4 w-4 mr-2" />
-                            拒絕邀請
-                          </Button>
-                        </div>
+                      {existingFollow?.status === "pending" && existingFollow.follower_id === userId && (
+                        <Badge variant="secondary" className="px-4 py-2">
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          追蹤請求已發送
+                        </Badge>
                       )}
-                      {existingInvitation?.status === "pending" && existingInvitation.sender_id === userId && (
-                        <Badge variant="secondary">邀請已發送</Badge>
+                      {existingFollow?.status === "accepted" && (
+                        <Badge variant="default" className="px-4 py-2 bg-green-600 hover:bg-green-700">
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Following
+                        </Badge>
                       )}
-                      {existingInvitation?.status === "accepted" && <Badge variant="default">已連結</Badge>}
                     </>
                   )}
                 </div>
