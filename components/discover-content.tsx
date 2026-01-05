@@ -67,6 +67,8 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
 
   const supabase = createBrowserClient()
 
+  const ADMIN_USER_ID = "7881efa4-4809-47da-b719-2139bd41d603"
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
 
@@ -78,6 +80,7 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
           .from("profiles")
           .select("*")
           .neq("id", userId)
+          .neq("id", ADMIN_USER_ID)
           .or(`username.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
           .limit(20)
         if (data) setUsers(data)
@@ -97,20 +100,25 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
           `,
           )
           .neq("user_id", userId)
-          .ilike("store_name", `%${searchQuery}%`)
+          .neq("user_id", ADMIN_USER_ID)
           .not("store_name", "is", null)
           .limit(20)
         if (data) setBookstores(data)
       } else if (activeTab === "books") {
         const { data: booksData } = await supabase
           .from("books")
-          .select("*")
-          .neq("owner_id", userId)
+          .select("*, user_books!inner(visibility)")
           .or(`title.ilike.%${searchQuery}%,author.ilike.%${searchQuery}%`)
+          .or(`owner_id.neq.${userId},owner_id.eq.${ADMIN_USER_ID}`)
           .limit(20)
 
         if (booksData) {
-          const bookOwnerIds = booksData.map((b) => b.owner_id).filter(Boolean)
+          const regularBooks = booksData.filter((b) => b.owner_id !== ADMIN_USER_ID)
+          const adminBooks = booksData.filter(
+            (b) => b.owner_id === ADMIN_USER_ID && b.user_books?.[0]?.visibility === "searchable",
+          )
+
+          const bookOwnerIds = regularBooks.map((b) => b.owner_id).filter(Boolean)
           const { data: bookOwnerProfiles } = bookOwnerIds.length
             ? await supabase
                 .from("profiles")
@@ -118,10 +126,22 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
                 .in("id", bookOwnerIds)
             : { data: [] }
 
-          const booksWithProfiles = booksData.map((book) => ({
-            ...book,
-            profiles: bookOwnerProfiles?.find((p) => p.id === book.owner_id) || null,
-          }))
+          const booksWithProfiles = [
+            ...regularBooks.map((book) => ({
+              ...book,
+              profiles: bookOwnerProfiles?.find((p) => p.id === book.owner_id) || null,
+            })),
+            ...adminBooks.map((book) => ({
+              ...book,
+              profiles: {
+                id: ADMIN_USER_ID,
+                username: "system",
+                full_name: "系統推薦",
+                display_name: "系統推薦",
+                avatar_url: null,
+              },
+            })),
+          ]
           setBooks(booksWithProfiles)
         }
       }
@@ -138,37 +158,51 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
 
     try {
       if (type === "users") {
-        const { data } = await supabase.from("profiles").select("*").neq("id", userId).limit(10)
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .neq("id", userId)
+          .neq("id", ADMIN_USER_ID)
+          .limit(10)
         if (data) setUsers(data)
       } else if (type === "bookstores") {
         const { data } = await supabase
           .from("bookstore_images")
-          .select(
-            `
-            *,
-            profiles!bookstore_images_user_id_fkey (
-              id,
-              username,
-              full_name,
-              display_name,
-              avatar_url
-            )
-          `,
-          )
+          .select("*")
           .neq("user_id", userId)
+          .neq("user_id", ADMIN_USER_ID)
           .not("store_name", "is", null)
           .limit(10)
-        if (data) setBookstores(data)
+
+        if (data) {
+          const userIds = data.map((b) => b.user_id).filter(Boolean)
+          const { data: profiles } = userIds.length
+            ? await supabase
+                .from("profiles")
+                .select("id, username, full_name, display_name, avatar_url")
+                .in("id", userIds)
+            : { data: [] }
+
+          const bookstoresWithProfiles = data.map((store) => ({
+            ...store,
+            profiles: profiles?.find((p) => p.id === store.user_id) || null,
+          }))
+          setBookstores(bookstoresWithProfiles)
+        }
       } else if (type === "books") {
         const { data: booksData } = await supabase
           .from("books")
-          .select("*")
-          .neq("owner_id", userId)
-          .not("owner_id", "is", null)
+          .select("*, user_books!inner(visibility)")
+          .or(`owner_id.neq.${userId},owner_id.eq.${ADMIN_USER_ID}`)
           .limit(20)
 
         if (booksData) {
-          const bookOwnerIds = booksData.map((b) => b.owner_id).filter(Boolean)
+          const regularBooks = booksData.filter((b) => b.owner_id !== ADMIN_USER_ID)
+          const adminBooks = booksData.filter(
+            (b) => b.owner_id === ADMIN_USER_ID && b.user_books?.[0]?.visibility === "searchable",
+          )
+
+          const bookOwnerIds = regularBooks.map((b) => b.owner_id).filter(Boolean)
           const { data: bookOwnerProfiles } = bookOwnerIds.length
             ? await supabase
                 .from("profiles")
@@ -176,10 +210,22 @@ export function DiscoverContent({ userId, initialUsers, initialBookstores, initi
                 .in("id", bookOwnerIds)
             : { data: [] }
 
-          const booksWithProfiles = booksData.map((book) => ({
-            ...book,
-            profiles: bookOwnerProfiles?.find((p) => p.id === book.owner_id) || null,
-          }))
+          const booksWithProfiles = [
+            ...regularBooks.map((book) => ({
+              ...book,
+              profiles: bookOwnerProfiles?.find((p) => p.id === book.owner_id) || null,
+            })),
+            ...adminBooks.map((book) => ({
+              ...book,
+              profiles: {
+                id: ADMIN_USER_ID,
+                username: "system",
+                full_name: "系統推薦",
+                display_name: "系統推薦",
+                avatar_url: null,
+              },
+            })),
+          ]
           setBooks(booksWithProfiles)
         }
       }

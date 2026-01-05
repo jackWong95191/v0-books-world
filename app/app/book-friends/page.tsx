@@ -13,12 +13,15 @@ export default async function BookFriendsPage() {
     redirect("/auth/login")
   }
 
+  const ADMIN_USER_ID = "7881efa4-4809-47da-b719-2139bd41d603"
+
   // Fetch users the current user is following (accepted follows)
   const { data: followingData } = await supabase
     .from("follows")
     .select("following_id")
     .eq("follower_id", user.id)
     .eq("status", "accepted")
+    .neq("following_id", ADMIN_USER_ID)
 
   const followingIds = followingData?.map((f) => f.following_id) || []
 
@@ -28,6 +31,7 @@ export default async function BookFriendsPage() {
     .select("follower_id")
     .eq("following_id", user.id)
     .eq("status", "accepted")
+    .neq("follower_id", ADMIN_USER_ID)
 
   const followerIds = followersData?.map((f) => f.follower_id) || []
 

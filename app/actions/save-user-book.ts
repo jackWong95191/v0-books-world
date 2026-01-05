@@ -2,7 +2,7 @@
 
 import { createServerClient } from "@/lib/supabase/server"
 
-export async function saveUserBook(bookId: string, status: string) {
+export async function saveUserBook(bookId: string, status: string, visibility = "private") {
   const supabase = await createServerClient()
 
   const {
@@ -22,18 +22,21 @@ export async function saveUserBook(bookId: string, status: string) {
     .maybeSingle()
 
   if (existing) {
-    // Update existing record
-    const { error } = await supabase.from("user_books").update({ status }).eq("book_id", bookId).eq("user_id", user.id)
+    const { error } = await supabase
+      .from("user_books")
+      .update({ status, visibility })
+      .eq("book_id", bookId)
+      .eq("user_id", user.id)
 
     if (error) {
       throw new Error(`更新失敗: ${error.message}`)
     }
   } else {
-    // Insert new record
     const { error } = await supabase.from("user_books").insert({
       book_id: bookId,
       user_id: user.id,
       status,
+      visibility,
     })
 
     if (error) {

@@ -54,6 +54,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
     status: string
     rating: number | null
     review: string | null
+    visibility: string
   } | null>(null)
 
   const [formData, setFormData] = useState({
@@ -72,6 +73,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
     status: "hold",
     price_cents: "",
     owner_sharing: "",
+    visibility: "private",
   })
 
   const [ownerProfile, setOwnerProfile] = useState<{
@@ -103,6 +105,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
         setFormData((prev) => ({
           ...prev,
           status: data.status || "hold",
+          visibility: data.visibility || "private",
         }))
       }
     }
@@ -142,8 +145,9 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
       status: userBookData?.status || "hold",
       price_cents: "",
       owner_sharing: "",
+      visibility: userBookData?.visibility || "private",
     })
-  }, [book, book.title, book.author, book.image_url, userBookData?.status])
+  }, [book, book.title, book.author, book.image_url, userBookData?.status, userBookData?.visibility])
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -203,11 +207,12 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
         throw new Error(`更新書籍失敗: ${updateError.message}`)
       }
 
-      await saveUserBook(book.id, formData.status)
+      await saveUserBook(book.id, formData.status, formData.visibility)
 
       const updatedBook: Book = {
         ...book,
         ...bookData,
+        visibility: formData.visibility,
       }
 
       setIsEditing(false)
@@ -402,6 +407,18 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
                               : "私密"}
                       </p>
                     </div>
+                    {userId === "7881efa4-4809-47da-b719-2139bd41d603" && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">可見性</p>
+                        <p className="font-medium">
+                          {formData.visibility === "private"
+                            ? "私密"
+                            : formData.visibility === "searchable"
+                              ? "可搜尋（顯示為系統推薦）"
+                              : "其他"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -639,6 +656,24 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
                     <option value="selling">可出售</option>
                   </select>
                 </div>
+
+                {userId === "7881efa4-4809-47da-b719-2139bd41d603" && (
+                  <div>
+                    <Label htmlFor="visibility">可見性</Label>
+                    <select
+                      id="visibility"
+                      value={formData.visibility}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, visibility: e.target.value }))}
+                      className="w-full px-3 py-2 border border-input rounded-lg bg-background"
+                    >
+                      <option value="private">私密</option>
+                      <option value="searchable">可搜尋（顯示為系統推薦）</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      設為「可搜尋」時，此書籍將在探索頁面顯示為「系統推薦」
+                    </p>
+                  </div>
+                )}
 
                 <div className="col-span-2">
                   <Label htmlFor="description">簡介</Label>

@@ -57,6 +57,8 @@ export function BookFriendsContent({
 
   const supabase = createBrowserClient()
 
+  const ADMIN_USER_ID = "7881efa4-4809-47da-b719-2139bd41d603"
+
   const getDisplayName = (profile: Profile) => {
     return profile.display_name || profile.full_name || profile.username || "匿名用戶"
   }
@@ -124,6 +126,7 @@ export function BookFriendsContent({
   const filterProfiles = (ids: string[]) => {
     return profiles
       .filter((p) => ids.includes(p.id))
+      .filter((p) => p.id !== ADMIN_USER_ID)
       .filter(
         (p) =>
           searchQuery === "" ||

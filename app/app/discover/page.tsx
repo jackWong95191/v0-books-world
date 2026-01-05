@@ -12,12 +12,20 @@ export default async function DiscoverPage() {
     redirect("/auth/login")
   }
 
-  const { data: randomUsers } = await supabase.from("profiles").select("*").neq("id", user.id).limit(10)
+  const ADMIN_USER_ID = "7881efa4-4809-47da-b719-2139bd41d603"
+
+  const { data: randomUsers } = await supabase
+    .from("profiles")
+    .select("*")
+    .neq("id", user.id)
+    .neq("id", ADMIN_USER_ID)
+    .limit(10)
 
   const { data: bookstoresData } = await supabase
     .from("bookstore_images")
     .select("*")
     .neq("user_id", user.id)
+    .neq("user_id", ADMIN_USER_ID)
     .not("store_name", "is", null)
     .limit(10)
 
@@ -38,6 +46,7 @@ export default async function DiscoverPage() {
     .from("books")
     .select("*")
     .neq("owner_id", user.id)
+    .neq("owner_id", ADMIN_USER_ID)
     .not("owner_id", "is", null)
     .limit(20)
 

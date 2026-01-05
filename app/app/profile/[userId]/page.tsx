@@ -18,6 +18,11 @@ export default async function UserProfilePage({ params }: { params: { userId: st
     redirect("/app/profile")
   }
 
+  const ADMIN_USER_ID = "7881efa4-4809-47da-b719-2139bd41d603"
+  if (params.userId === ADMIN_USER_ID) {
+    notFound()
+  }
+
   // Fetch the other user's profile
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", params.userId).single()
 

@@ -1,22 +1,27 @@
 "use client"
 
+import { DialogFooter } from "@/components/ui/dialog"
+
+import { DialogDescription } from "@/components/ui/dialog"
+
+import { DialogTitle } from "@/components/ui/dialog"
+
+import { DialogHeader } from "@/components/ui/dialog"
+
+import { DialogContent } from "@/components/ui/dialog"
+
+import { Dialog } from "@/components/ui/dialog"
+
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { useRouter } from "next/navigation"
 import { MessageCircle, Send, Inbox, BoomBox as Outbox, Search, X } from "lucide-react"
 import Image from "next/image"
 import { format } from "date-fns"
@@ -66,6 +71,7 @@ export function MessagesContent({ userId }: { userId: string }) {
   const [showCompose, setShowCompose] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [unreadCount, setUnreadCount] = useState(0)
+  const router = useRouter()
 
   // Compose form state
   const [composeData, setComposeData] = useState({
@@ -262,8 +268,7 @@ export function MessagesContent({ userId }: { userId: string }) {
                   key={message.id}
                   className={`cursor-pointer transition-all hover:shadow-md ${!message.is_read ? "bg-blue-50 border-blue-200" : ""}`}
                   onClick={() => {
-                    setSelectedMessage(message)
-                    if (!message.is_read) markAsRead(message.id)
+                    router.push(`/app/messages/${message.id}`)
                   }}
                 >
                   <CardHeader className="p-4">
@@ -312,7 +317,9 @@ export function MessagesContent({ userId }: { userId: string }) {
                 <Card
                   key={message.id}
                   className="cursor-pointer transition-all hover:shadow-md"
-                  onClick={() => setSelectedMessage(message)}
+                  onClick={() => {
+                    router.push(`/app/messages/${message.id}`)
+                  }}
                 >
                   <CardHeader className="p-4">
                     <div className="flex items-start justify-between">
@@ -345,52 +352,6 @@ export function MessagesContent({ userId }: { userId: string }) {
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Message Detail Dialog */}
-      {selectedMessage && (
-        <Dialog open={!!selectedMessage} onOpenChange={() => setSelectedMessage(null)}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{selectedMessage.subject}</DialogTitle>
-              <DialogDescription>
-                {activeTab === "inbox" ? "寄件人" : "收件人"}：
-                {activeTab === "inbox"
-                  ? selectedMessage.sender?.display_name || selectedMessage.sender?.username
-                  : selectedMessage.receiver?.display_name || selectedMessage.receiver?.username}
-                {" • "}
-                {format(new Date(selectedMessage.created_at), "yyyy年MM月dd日 HH:mm", { locale: zhTW })}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              {selectedMessage.book && (
-                <Card>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-sm">相關書籍</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0">
-                    <div className="flex items-center gap-3">
-                      {selectedMessage.book.image_url && (
-                        <Image
-                          src={selectedMessage.book.image_url || "/placeholder.svg"}
-                          alt={selectedMessage.book.title}
-                          width={60}
-                          height={80}
-                          className="rounded object-cover"
-                        />
-                      )}
-                      <div>
-                        <p className="font-semibold">{selectedMessage.book.title}</p>
-                        <p className="text-sm text-muted-foreground">{selectedMessage.book.author}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-              <div className="whitespace-pre-wrap text-sm">{selectedMessage.content}</div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {/* Compose Dialog */}
       <Dialog open={showCompose} onOpenChange={setShowCompose}>
