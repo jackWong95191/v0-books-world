@@ -111,7 +111,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <Link href="/app/my-books" className="block">
+              <Link href="/demo" className="block">
                 <Button type="button" variant="outline" className="w-full">
                   Demo 模式 (免登入體驗)
                 </Button>

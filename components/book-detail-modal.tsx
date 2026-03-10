@@ -44,9 +44,10 @@ interface BookDetailModalProps {
   onUpdate?: (updatedBook: Book) => void
   onDelete?: (bookId: string) => void
   readOnly?: boolean
+  isDemo?: boolean
 }
 
-export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, readOnly = false }: BookDetailModalProps) {
+export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, readOnly = false, isDemo = false }: BookDetailModalProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -281,7 +282,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
         <div className="bg-white border-b border-border p-4 flex items-center justify-between flex-shrink-0">
           <h2 className="text-lg font-bold">{readOnly ? "書籍詳情" : isEditing ? "編輯書籍資料" : "書籍詳情"}</h2>
           <div className="flex items-center gap-2">
-            {!readOnly && !isEditing ? (
+            {!readOnly && !isEditing && !isDemo ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="border border-border">
                   <Edit className="w-4 h-4 mr-2" />
@@ -384,7 +385,7 @@ export function BookDetailModal({ book, userId, onClose, onUpdate, onDelete, rea
                             : formData.format === "hardcover"
                               ? "精裝"
                               : formData.format === "ebook"
-                                ? "電子書"
+                                ? "電子���"
                                 : "有聲書"}
                         </p>
                       </div>
