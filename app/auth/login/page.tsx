@@ -101,6 +101,21 @@ export default function LoginPage() {
                   註冊
                 </Link>
               </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">或</span>
+                </div>
+              </div>
+
+              <Link href="/app/my-books" className="block">
+                <Button type="button" variant="outline" className="w-full">
+                  Demo 模式 (免登入體驗)
+                </Button>
+              </Link>
             </form>
           </CardContent>
         </Card>
