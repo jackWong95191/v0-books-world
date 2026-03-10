@@ -153,7 +153,7 @@ export default function DemoPage() {
       (book.isbn && book.isbn.includes(searchQuery))
   )
 
-  function handleSavePreferences(updates: Partial<BookshelfPreferences>) {
+  async function handleSavePreferences(updates: Partial<BookshelfPreferences>) {
     setPreferences((prev) => ({ ...prev, ...updates }))
   }
 
@@ -292,20 +292,20 @@ export default function DemoPage() {
       </div>
 
       {/* Settings Dialog */}
-      <BookshelfSettingsDialog
-        open={showSettings}
-        onOpenChange={setShowSettings}
-        preferences={preferences}
-        onSave={handleSavePreferences}
-      />
+      {showSettings && (
+        <BookshelfSettingsDialog
+          preferences={preferences}
+          onSave={handleSavePreferences}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {/* Book Detail Modal */}
       {selectedBook && (
         <BookDetailModal
           book={selectedBook}
           onClose={() => setSelectedBook(null)}
-          onEdit={() => {}}
-          onDelete={() => {}}
+          readOnly={true}
           isDemo={true}
         />
       )}
